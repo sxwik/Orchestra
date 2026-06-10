@@ -1,6 +1,8 @@
+ {
 {
-  "name": "orchestra",
-  "version": "0.1.0",
+  "name": "@sxwik/orchestra",
+  "version": "0.2.0-alpha.1"
+}
   "description": "The easiest way to add AI to a project.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
