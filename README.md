@@ -5,7 +5,7 @@ Orchestra is a plugin-first TypeScript framework for unified API integration.
 ## Installation
 
 ```bash
-npm install orchestra
+npm install @sxwik/orchestra
 ```
 
 ## Usage
