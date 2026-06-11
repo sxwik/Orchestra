@@ -1,4 +1,4 @@
-# Orchestra 🎻🚀
+# Orchestra 
 
 Orchestra is a high-performance, plugin-first TypeScript framework for **Unified AI Orchestration**. 
 
