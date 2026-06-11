@@ -6,6 +6,7 @@ import { CapabilityRegistry } from '../src/core/CapabilityRegistry';
 import { PluginRegistry } from '../src/core/PluginRegistry';
 import { EventBus } from '../src/core/EventBus';
 import { OrchestraError, OrchestraPlugin } from '../src/types';
+import { validateProvider } from '../src/utils/validation';
 
 vi.mock('@google/genai', () => {
   return {
@@ -252,5 +253,194 @@ describe('Orchestra SDK', () => {
 
     const res = await (app as any).hello();
     expect(res).toBe('hello world');
+  });
+
+  it('should target a specific provider when specified in options', async () => {
+    const ai = new Orchestra({
+      providers: ['gemini', 'openai'],
+    });
+
+    const resOpenAI = await ai.chat('hello', { provider: 'openai' });
+    expect(resOpenAI.provider).toBe('openai');
+    expect(resOpenAI.text).toBe('openai response');
+
+    const resGemini = await ai.chat('hello', { provider: 'gemini' });
+    expect(resGemini.provider).toBe('gemini');
+    expect(resGemini.text).toBe('gemini response');
+  });
+
+  it('should route prompts based on heuristics', async () => {
+    const ai = new Orchestra({
+      providers: ['gemini', 'openai'],
+    });
+
+    // Simple chat -> prefers gemini
+    const resSimple = await ai.chat('hello', { provider: 'auto' });
+    expect(resSimple.provider).toBe('gemini');
+
+    // Coding -> prefers openai (since claude not registered, openai is next best)
+    const resCoding = await ai.chat('Write a typescript function to sort an array.', { provider: 'auto' });
+    expect(resCoding.provider).toBe('openai');
+
+    // Long prompt -> prefers gemini
+    const longPrompt = 'A'.repeat(9000);
+    const resLong = await ai.chat(longPrompt, { provider: 'auto' });
+    expect(resLong.provider).toBe('gemini');
+  });
+
+  it('should place failed providers on cooldown and bypass them', async () => {
+    const app = new OrchestraCore({
+      providers: ['fail-provider', 'success-provider'],
+      cooldownDurationMs: 50, // very short cooldown for testing
+    });
+
+    let failCount = 0;
+    const failProvider = {
+      name: 'fail-provider',
+      async chat(prompt: string) {
+        failCount++;
+        const err = new Error('Rate limit exceeded');
+        (err as any).status = 429; // triggers cooldown
+        throw err;
+      }
+    };
+
+    let successCount = 0;
+    const successProvider = {
+      name: 'success-provider',
+      async chat(prompt: string) {
+        successCount++;
+        return { text: 'success response', model: 'ok', provider: 'success-provider' };
+      }
+    };
+
+    app.capabilities.register('chat', failProvider);
+    app.capabilities.register('chat', successProvider);
+
+    // First call: fail-provider is tried, fails, gets put on cooldown. Then success-provider runs.
+    const res1 = await app.chat('hello');
+    expect(res1.text).toBe('success response');
+    expect(failCount).toBe(1);
+    expect(successCount).toBe(1);
+
+    // Second call: fail-provider is on cooldown, so it is bypassed. Only success-provider runs.
+    const res2 = await app.chat('hello');
+    expect(res2.text).toBe('success response');
+    expect(failCount).toBe(1); // still 1!
+    expect(successCount).toBe(2);
+
+    // Wait for cooldown to expire
+    await new Promise(resolve => setTimeout(resolve, 60));
+
+    // Third call: cooldown expired, so fail-provider is tried again.
+    const res3 = await app.chat('hello');
+    expect(res3.text).toBe('success response');
+    expect(failCount).toBe(2); // increased to 2!
+    expect(successCount).toBe(3);
+  });
+
+  it('should race providers and return the fastest successful result', async () => {
+    const app = new OrchestraCore();
+
+    const slowProvider = {
+      name: 'slow-provider',
+      async chat(prompt: string) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { text: 'slow response', model: 'slow', provider: 'slow-provider' };
+      }
+    };
+
+    const fastProvider = {
+      name: 'fast-provider',
+      async chat(prompt: string) {
+        return { text: 'fast response', model: 'fast', provider: 'fast-provider' };
+      }
+    };
+
+    app.capabilities.register('chat', slowProvider);
+    app.capabilities.register('chat', fastProvider);
+
+    const result = await app.race(['slow-provider', 'fast-provider'], 'Explain quantum physics');
+    expect(result.winner).toBe('fast-provider');
+    expect(result.response.text).toBe('fast response');
+    expect(result.latency).toBeLessThan(50);
+  });
+
+  it('should formulate consensus using a judge model', async () => {
+    const app = new OrchestraCore();
+
+    const p1 = {
+      name: 'model-a',
+      async chat(prompt: string) {
+        return { text: 'Answer A', model: 'a', provider: 'model-a' };
+      }
+    };
+
+    const p2 = {
+      name: 'model-b',
+      async chat(prompt: string) {
+        return { text: 'Answer B', model: 'b', provider: 'model-b' };
+      }
+    };
+
+    const judge = {
+      name: 'judge-model',
+      async chat(prompt: string) {
+        // We expect prompt to contain both responses
+        expect(prompt).toContain('[Model model-a]:\nAnswer A');
+        expect(prompt).toContain('[Model model-b]:\nAnswer B');
+        return { text: 'Consensus is Answer A and B combined', model: 'judge', provider: 'judge-model' };
+      }
+    };
+
+    app.capabilities.register('chat', p1);
+    app.capabilities.register('chat', p2);
+    app.capabilities.register('chat', judge);
+
+    const result = await app.consensus(['model-a', 'model-b'], 'What is 2+2?', { judge: 'judge-model' });
+    expect(result.text).toBe('Consensus is Answer A and B combined');
+    expect(result.judge).toBe('judge-model');
+    expect(result.responses.length).toBe(2);
+    expect(result.responses[0].provider).toBe('model-a');
+    expect(result.responses[1].provider).toBe('model-b');
+  });
+
+  describe('Provider Compliance Suite', () => {
+    it('should pass validation for a fully compliant provider', async () => {
+      const validProvider = {
+        name: 'valid-provider',
+        async chat(prompt: string) {
+          return {
+            text: `Echo: ${prompt}`,
+            model: 'valid-model-1',
+            provider: 'valid-provider',
+          };
+        }
+      };
+
+      const result = await validateProvider(validProvider);
+      expect(result.passed).toBe(true);
+      expect(result.errors.length).toBe(0);
+    });
+
+    it('should detect compliance failures for incorrect formats or names', async () => {
+      const invalidProvider = {
+        name: '', // Empty name
+        async chat(prompt: string) {
+          return {
+            text: 123 as any, // Not a string
+            model: 'valid-model-1',
+            provider: 'different-provider-name', // Mismatched provider
+          };
+        }
+      };
+
+      const result = await validateProvider(invalidProvider as any);
+      expect(result.passed).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some(e => e.includes('name'))).toBe(true);
+      expect(result.errors.some(e => e.includes('text'))).toBe(true);
+      expect(result.errors.some(e => e.includes('match'))).toBe(true);
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { ChatResponse, Provider, OrchestraError, OrchestraErrorCode, Container, OrchestraConfig } from '../../types';
+import { ChatResponse, Provider, OrchestraError, OrchestraErrorCode, Container, OrchestraConfig, ChatOptions } from '../../types';
 import { resolveProviderConfig } from '../../core/config';
 
 export class GeminiProvider implements Provider {
@@ -41,17 +41,18 @@ export class GeminiProvider implements Provider {
     return this.aiInstance;
   }
 
-  async chat(prompt: string): Promise<ChatResponse> {
+  async chat(prompt: string, options?: ChatOptions): Promise<ChatResponse> {
     try {
       const ai = this.getAI();
+      const model = options?.model || this.model;
       const response = await ai.models.generateContent({
-        model: this.model,
+        model,
         contents: prompt,
       });
 
       return {
         text: response.text || '',
-        model: this.model,
+        model,
         provider: 'gemini',
         usage: response.usageMetadata ? {
           inputTokens: response.usageMetadata.promptTokenCount ?? 0,
@@ -63,11 +64,12 @@ export class GeminiProvider implements Provider {
     }
   }
 
-  async *stream(prompt: string): AsyncIterable<string> {
+  async *stream(prompt: string, options?: ChatOptions): AsyncIterable<string> {
     try {
       const ai = this.getAI();
+      const model = options?.model || this.model;
       const responseStream = await ai.models.generateContentStream({
-        model: this.model,
+        model,
         contents: prompt,
       });
 

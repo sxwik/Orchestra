@@ -4,7 +4,10 @@ export type {
   ProviderConfig,
   OrchestraConfig,
   Provider,
-  OrchestraPlugin
+  OrchestraPlugin,
+  ChatOptions,
+  RaceResult,
+  ConsensusResult
 } from './types';
 export { OrchestraError } from './types';
 export * from './Orchestra';
@@ -23,3 +26,4 @@ export * from './plugins/gemini/GeminiPlugin';
 export * from './plugins/gemini/GeminiProvider';
 export * from './plugins/openai/OpenAIPlugin';
 export * from './plugins/openai/OpenAIProvider';
+export * from './utils/validation';

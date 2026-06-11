@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { ChatResponse, Provider, OrchestraError, OrchestraErrorCode, Container, OrchestraConfig } from '../../types';
+import { ChatResponse, Provider, OrchestraError, OrchestraErrorCode, Container, OrchestraConfig, ChatOptions } from '../../types';
 import { resolveProviderConfig } from '../../core/config';
 
 export class OpenAIProvider implements Provider {
@@ -41,11 +41,12 @@ export class OpenAIProvider implements Provider {
     return this.aiInstance;
   }
 
-  async chat(prompt: string): Promise<ChatResponse> {
+  async chat(prompt: string, options?: ChatOptions): Promise<ChatResponse> {
     try {
       const ai = this.getAI();
+      const model = options?.model || this.model;
       const response = await ai.chat.completions.create({
-        model: this.model,
+        model,
         messages: [{ role: 'user', content: prompt }],
       });
 
@@ -54,7 +55,7 @@ export class OpenAIProvider implements Provider {
 
       return {
         text,
-        model: this.model,
+        model,
         provider: 'openai',
         usage: response.usage ? {
           inputTokens: response.usage.prompt_tokens,
@@ -66,11 +67,12 @@ export class OpenAIProvider implements Provider {
     }
   }
 
-  async *stream(prompt: string): AsyncIterable<string> {
+  async *stream(prompt: string, options?: ChatOptions): AsyncIterable<string> {
     try {
       const ai = this.getAI();
+      const model = options?.model || this.model;
       const responseStream = await ai.chat.completions.create({
-        model: this.model,
+        model,
         messages: [{ role: 'user', content: prompt }],
         stream: true,
       });

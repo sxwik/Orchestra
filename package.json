@@ -1,22 +1,18 @@
 {
   "name": "@sxwik/orchestra",
-  "version": "0.2.0-alpha.1",
+  "version": "0.3.0-alpha.1",
   "description": "Plugin-first TypeScript framework for unified API integration.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sxwik/Orchestra.git"
   },
-
   "bugs": {
     "url": "https://github.com/sxwik/Orchestra/issues"
   },
-
   "homepage": "https://github.com/sxwik/Orchestra#readme",
-
   "keywords": [
     "ai",
     "sdk",
@@ -29,28 +25,23 @@
     "orchestra",
     "developer-tools"
   ],
-
   "scripts": {
     "build": "tsc",
     "test": "vitest run"
   },
-
   "dependencies": {
     "@google/genai": "^2.8.0",
     "openai": "^4.28.0"
   },
-
   "devDependencies": {
     "@types/node": "^20.0.0",
     "dotenv": "^16.4.5",
     "typescript": "^5.0.0",
     "vitest": "^1.3.0"
   },
-
   "engines": {
     "node": ">=18"
   },
-
   "files": [
     "dist",
     "README.md",
